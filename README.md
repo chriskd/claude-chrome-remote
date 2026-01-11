@@ -74,7 +74,7 @@ claude
 
 1. **Chrome extension starts a native messaging host** - When you open the Claude extension sidebar, it launches a native process that creates a Unix socket at `$TMPDIR/claude-mcp-browser-bridge-$USER`
 
-2. **This script creates an SSH reverse tunnel** - Using `ssh -R`, the local socket is forwarded to the same path on the remote machine
+2. **This script creates an SSH reverse tunnel** - Using `ssh -R`, the local socket is forwarded to the same path on the remote machine. The script then sets the socket permissions to 600 (required by Claude Code for security)
 
 3. **Remote Claude Code connects normally** - Claude Code looks for the socket at the standard path. It doesn't know (or care) that it's actually tunneled to your local machine
 
@@ -134,6 +134,15 @@ mkdir -p ~/.config/google-chrome/Default/Extensions/fcoeoabgfenejglbffodgkkbkcdh
 You need OpenSSH 6.7 or later, which added Unix domain socket forwarding.
 
 **Fix:** Upgrade your SSH client. On macOS, the built-in SSH is modern enough. On older Linux, you may need to update.
+
+### Socket permission errors / Claude Code won't connect
+
+Claude Code requires the socket to have 600 permissions (user read/write only). The script sets this automatically, but if it fails:
+
+**Fix:**
+```bash
+ssh remote-host 'chmod 600 $TMPDIR/claude-mcp-browser-bridge-*'
+```
 
 ### Browser commands timeout or fail
 

@@ -122,6 +122,41 @@ trap cleanup EXIT
 # Start the tunnel
 echo ""
 echo -e "${GREEN}Starting socket tunnel...${NC}"
+
+# Use SSH's StreamLocalBindUnlink to auto-remove stale sockets
+# -N: don't execute remote command
+# -T: disable pseudo-terminal
+# Run in background so we can fix permissions
+ssh -o StreamLocalBindUnlink=yes \
+    -o ExitOnForwardFailure=yes \
+    -R "$REMOTE_SOCKET:$LOCAL_SOCKET" \
+    -N -T \
+    "$REMOTE_HOST" &
+SSH_PID=$!
+
+# Wait for socket to be created, then fix permissions
+# Claude Code requires 600 (user read/write only) on the socket
+echo -n "Waiting for remote socket... "
+for i in {1..10}; do
+    if ssh -o BatchMode=yes "$REMOTE_HOST" "test -S '$REMOTE_SOCKET'" 2>/dev/null; then
+        echo "found"
+        echo -n "Setting socket permissions to 600... "
+        if ssh -o BatchMode=yes "$REMOTE_HOST" "chmod 600 '$REMOTE_SOCKET'" 2>/dev/null; then
+            echo "done"
+        else
+            echo -e "${YELLOW}warning: could not set permissions${NC}"
+        fi
+        break
+    fi
+    sleep 0.5
+done
+
+# Check if SSH tunnel is still running
+if ! kill -0 $SSH_PID 2>/dev/null; then
+    echo -e "${RED}Error: SSH tunnel failed to start${NC}"
+    exit 1
+fi
+
 echo ""
 echo "The tunnel will stay open until you press Ctrl+C."
 echo "On your remote machine, you can now run 'claude' and it will"
@@ -130,11 +165,5 @@ echo ""
 echo "=========================================="
 echo ""
 
-# Use SSH's StreamLocalBindUnlink to auto-remove stale sockets
-# -N: don't execute remote command
-# -T: disable pseudo-terminal
-ssh -o StreamLocalBindUnlink=yes \
-    -o ExitOnForwardFailure=yes \
-    -R "$REMOTE_SOCKET:$LOCAL_SOCKET" \
-    -N -T \
-    "$REMOTE_HOST"
+# Wait for the tunnel to be terminated
+wait $SSH_PID
