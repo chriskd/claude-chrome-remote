@@ -90,6 +90,35 @@ echo ""
 echo "Cleaning up any stale remote socket..."
 ssh -o BatchMode=yes "$REMOTE_HOST" "rm -f '$REMOTE_SOCKET'" 2>/dev/null || true
 
+# Create fake extension directory so /chrome status reports correctly on remote
+# This makes Claude Code think the extension is installed
+EXTENSION_DIR="~/.config/google-chrome/Default/Extensions/fcoeoabgfenejglbffodgkkbkcdhcgfn"
+CREATED_EXTENSION_DIR=false
+
+echo -n "Setting up extension status workaround... "
+# Check if it already exists (don't clobber)
+if ssh -o BatchMode=yes "$REMOTE_HOST" "test -e $EXTENSION_DIR" 2>/dev/null; then
+    echo "already exists, skipping"
+else
+    if ssh -o BatchMode=yes "$REMOTE_HOST" "mkdir -p $EXTENSION_DIR" 2>/dev/null; then
+        echo "done"
+        CREATED_EXTENSION_DIR=true
+    else
+        echo -e "${YELLOW}warning: could not create extension directory${NC}"
+        echo "  /chrome status may not report correctly on remote"
+    fi
+fi
+
+# Cleanup function
+cleanup() {
+    if [ "$CREATED_EXTENSION_DIR" = true ]; then
+        echo ""
+        echo "Cleaning up extension directory..."
+        ssh -o BatchMode=yes "$REMOTE_HOST" "rmdir $EXTENSION_DIR 2>/dev/null; rmdir ~/.config/google-chrome/Default/Extensions 2>/dev/null; rmdir ~/.config/google-chrome/Default 2>/dev/null; rmdir ~/.config/google-chrome 2>/dev/null" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
 # Start the tunnel
 echo ""
 echo -e "${GREEN}Starting socket tunnel...${NC}"
